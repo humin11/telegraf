@@ -10,6 +10,8 @@ import (
 
 	"github.com/influxdata/tail"
 
+	"github.com/axgle/mahonia"
+
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/internal/globpath"
 	"github.com/influxdata/telegraf/plugins/inputs"
@@ -25,6 +27,7 @@ type Tail struct {
 	FromBeginning bool
 	Pipe          bool
 	WatchMethod   string
+	Encoding      string
 
 	tailers    map[string]*tail.Tail
 	parserFunc parsers.ParserFunc
@@ -55,6 +58,8 @@ const sampleConfig = `
   from_beginning = false
   ## Whether file is a named pipe
   pipe = false
+	## Convert other charset encoding to utf-8
+	encoding = gb2312
 
   ## Method used to watch for file updates.  Can be either "inotify" or "poll".
   # watch_method = "inotify"
@@ -166,6 +171,18 @@ func (t *Tail) receiver(parser parsers.Parser, tailer *tail.Tail) {
 		}
 		// Fix up files with Windows line endings.
 		text := strings.TrimRight(line.Text, "\r")
+
+		log.Printf("D! [inputs.tail] tail file encoding: %s", t.Encoding)
+		if t.Encoding != "" {
+			log.Printf("D! [inputs.tail] tail file sourcetext: %s", text)
+			sourceCoder := mahonia.NewDecoder(t.Encoding)
+			sourceResult := sourceCoder.ConvertString(text)
+			destCoder := mahonia.NewDecoder("utf-8")
+			log.Printf("D! [inputs.tail] tail convert file encoding: %s to : %s", t.Encoding, "utf-8")
+			_, newText, _ := destCoder.Translate([]byte(sourceResult), true)
+			text = string(newText)
+			log.Printf("D! [inputs.tail] tail file desttext: %s", text)
+		}
 
 		if firstLine {
 			metrics, err = parser.Parse([]byte(text))

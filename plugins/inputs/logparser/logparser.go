@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/axgle/mahonia"
 	"github.com/influxdata/tail"
 
 	"github.com/influxdata/telegraf"
@@ -39,6 +40,7 @@ type logEntry struct {
 type LogParserPlugin struct {
 	Files         []string
 	FromBeginning bool
+	Encoding      string
 	WatchMethod   string
 
 	tailers map[string]*tail.Tail
@@ -66,6 +68,9 @@ const sampleConfig = `
   ## while telegraf is running (and that match the "files" globs) will always
   ## be read from the beginning.
   from_beginning = false
+
+	## Set the file encoding, Convert other charset encoding to utf-8
+	encoding = gbk
 
   ## Method used to watch for file updates.  Can be either "inotify" or "poll".
   # watch_method = "inotify"
@@ -230,6 +235,18 @@ func (l *LogParserPlugin) receiver(tailer *tail.Tail) {
 
 		// Fix up files with Windows line endings.
 		text := strings.TrimRight(line.Text, "\r")
+
+		log.Printf("D! [inputs.tail] tail file encoding: %s", l.Encoding)
+		if l.Encoding != "" {
+			log.Printf("D! [inputs.tail] tail file sourcetext: %s", text)
+			sourceCoder := mahonia.NewDecoder(l.Encoding)
+			sourceResult := sourceCoder.ConvertString(text)
+			destCoder := mahonia.NewDecoder("utf-8")
+			log.Printf("D! [inputs.tail] tail convert file encoding: %s to : %s", l.Encoding, "utf-8")
+			_, newText, _ := destCoder.Translate([]byte(sourceResult), true)
+			text = string(newText)
+			log.Printf("D! [inputs.tail] tail file desttext: %s", text)
+		}
 
 		entry := logEntry{
 			path: tailer.Filename,
